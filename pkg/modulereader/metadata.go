@@ -54,6 +54,7 @@ type MetadataGhpc struct {
 func GetMetadata(source string) (Metadata, error) {
 	var err error
 	var data []byte
+	// TODO: use bpmetadata.UnmarshalMetadata, it performs some additional checks
 	filePath := filepath.Join(source, "metadata.yaml")
 
 	switch {
