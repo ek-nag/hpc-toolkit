@@ -89,11 +89,10 @@ func (g DeploymentGroup) Kind() ModuleKind {
 // Module return the module with the given ID
 func (bp *Blueprint) Module(id ModuleID) (*Module, error) {
 	var mod *Module
-	bp.WalkModules(func(m *Module) error {
+	bp.WalkModulesSafe(func(_ ModulePath, m *Module) {
 		if m.ID == id {
 			mod = m
 		}
-		return nil
 	})
 	if mod == nil {
 		return nil, UnknownModuleError{id}
@@ -101,25 +100,19 @@ func (bp *Blueprint) Module(id ModuleID) (*Module, error) {
 	return mod, nil
 }
 
-// SuggestModuleIDHint return a correct spelling of given ModuleID id if one
-// is close enough (based on maxHintDist)
-func (bp Blueprint) SuggestModuleIDHint(id ModuleID) (string, bool) {
-	clMod := ""
-	minDist := -1
-	bp.WalkModules(func(m *Module) error {
-		dist := levenshtein.Distance(string(m.ID), string(id), nil)
-		if minDist == -1.0 || dist < minDist {
-			minDist = dist
-			clMod = string(m.ID)
+func hintSpelling(s string, dict []string, err error) error {
+	best, minDist := "", maxHintDist+1
+	for _, w := range dict {
+		d := levenshtein.Distance(s, w, nil)
+		if d < minDist {
+			best, minDist = w, d
 		}
-		return nil
-	})
-
-	if clMod != "" && minDist <= maxHintDist {
-		return clMod, true
 	}
+	if minDist <= maxHintDist {
+		return HintError{fmt.Sprintf("did you mean %q?", best), err}
+	}
+	return err
 
-	return "", false
 }
 
 // ModuleGroup returns the group containing the module
@@ -308,7 +301,7 @@ func (m Module) ListUnusedModules() ModuleIDs {
 // GetUsedDeploymentVars returns a list of deployment vars used in the given value
 func GetUsedDeploymentVars(val cty.Value) []string {
 	res := []string{}
-	for _, ref := range valueReferences(val) {
+	for ref := range valueReferences(val) {
 		if ref.GlobalVar {
 			res = append(res, ref.Name)
 		}
@@ -322,9 +315,8 @@ func (bp Blueprint) ListUnusedVariables() []string {
 	ns := map[string]cty.Value{
 		"vars": bp.Vars.AsObject(),
 	}
-	bp.WalkModules(func(m *Module) error {
+	bp.WalkModulesSafe(func(_ ModulePath, m *Module) {
 		ns["module_"+string(m.ID)] = m.Settings.AsObject()
-		return nil
 	})
 	for _, v := range bp.Validators {
 		ns["validator_"+v.Validator] = v.Inputs.AsObject()
@@ -398,11 +390,10 @@ func (dc DeploymentConfig) ExportBlueprint(outputFilename string) error {
 
 // addKindToModules sets the kind to 'terraform' when empty.
 func (bp *Blueprint) addKindToModules() {
-	bp.WalkModules(func(m *Module) error {
+	bp.WalkModulesSafe(func(_ ModulePath, m *Module) {
 		if m.Kind == UnknownKind {
 			m.Kind = TerraformKind
 		}
-		return nil
 	})
 }
 
@@ -440,7 +431,7 @@ func checkModulesAndGroups(bp Blueprint) error {
 
 // validateModuleUseReferences verifies that any used modules exist and
 // are in the correct group
-func validateModuleUseReferences(p modulePath, mod Module, bp Blueprint) error {
+func validateModuleUseReferences(p ModulePath, mod Module, bp Blueprint) error {
 	errs := Errors{}
 	for iu, used := range mod.Use {
 		errs.At(p.Use.At(iu), validateModuleReference(bp, mod, used))
@@ -636,12 +627,13 @@ func IsProductOfModuleUse(v cty.Value) []ModuleID {
 }
 
 // WalkModules walks all modules in the blueprint and calls the walker function
-func (bp *Blueprint) WalkModules(walker func(*Module) error) error {
+func (bp *Blueprint) WalkModules(walker func(ModulePath, *Module) error) error {
 	for ig := range bp.DeploymentGroups {
 		g := &bp.DeploymentGroups[ig]
 		for im := range g.Modules {
+			p := Root.Groups.At(ig).Modules.At(im)
 			m := &g.Modules[im]
-			if err := walker(m); err != nil {
+			if err := walker(p, m); err != nil {
 				return err
 			}
 		}
@@ -649,13 +641,21 @@ func (bp *Blueprint) WalkModules(walker func(*Module) error) error {
 	return nil
 }
 
+func (bp *Blueprint) WalkModulesSafe(walker func(ModulePath, *Module)) {
+	bp.WalkModules(func(p ModulePath, m *Module) error {
+		walker(p, m)
+		return nil
+	})
+}
+
 // validate every module setting in the blueprint containing a reference
-func validateModuleSettingReferences(p modulePath, m Module, bp Blueprint) error {
+func validateModuleSettingReferences(p ModulePath, m Module, bp Blueprint) error {
 	errs := Errors{}
 	for k, v := range m.Settings.Items() {
-		for _, r := range valueReferences(v) {
-			// TODO: add a cty.Path suffix to the errors path for better location
-			errs.At(p.Settings.Dot(k), validateModuleSettingReference(bp, m, r))
+		for r, rp := range valueReferences(v) {
+			errs.At(
+				p.Settings.Dot(k).Cty(rp),
+				validateModuleSettingReference(bp, m, r))
 		}
 	}
 	return errs.OrNil()
@@ -684,18 +684,13 @@ func (bp *Blueprint) evalVars() (Dict, error) {
 	dfs = func(n string) error {
 		used[n] = 1 // put on stack
 		v := bp.Vars.Get(n)
-		for _, ref := range valueReferences(v) {
+		for ref, rp := range valueReferences(v) {
+			p := Root.Vars.Dot(n).Cty(rp)
 			if !ref.GlobalVar {
-				return BpError{
-					Root.Vars.Dot(n),
-					fmt.Errorf("non-global variable %q referenced in expression", ref.Name),
-				}
+				return BpError{p, fmt.Errorf("non-global variable %q referenced in expression", ref.Name)}
 			}
 			if used[ref.Name] == 1 {
-				return BpError{
-					Root.Vars.Dot(n),
-					fmt.Errorf("cyclic dependency detected: %q -> %q", n, ref.Name),
-				}
+				return BpError{p, fmt.Errorf("cyclic dependency detected: %q -> %q", n, ref.Name)}
 			}
 			if used[ref.Name] == 0 {
 				if err := dfs(ref.Name); err != nil {

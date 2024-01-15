@@ -13,8 +13,7 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
 * [Blueprint Descriptions](#blueprint-descriptions)
   * [hpc-slurm.yaml](#hpc-slurmyaml-) ![core-badge]
   * [hpc-enterprise-slurm.yaml](#hpc-enterprise-slurmyaml-) ![core-badge]
-  * [hpc-slurm6.yaml](#hpc-slurm6yaml-) ![community-badge] ![experimental-badge]
-  * [hpc-slurm6-tpu.yaml](#hpc-slurm6-tpuyaml-) ![community-badge] ![experimental-badge]
+  * [hpc-slurm6-tpu.yaml](#hpc-slurm6-tpuyaml--) ![community-badge] ![experimental-badge]
   * [ml-slurm.yaml](#ml-slurmyaml-) ![core-badge]
   * [image-builder.yaml](#image-builderyaml-) ![core-badge]
   * [serverless-batch.yaml](#serverless-batchyaml-) ![core-badge]
@@ -43,7 +42,6 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [hpc-slurm-chromedesktop.yaml](#hpc-slurm-chromedesktopyaml--) ![community-badge] ![experimental-badge]
   * [flux-cluster](#flux-clusteryaml--) ![community-badge] ![experimental-badge]
   * [tutorial-fluent.yaml](#tutorial-fluentyaml--) ![community-badge] ![experimental-badge]
-  * [hpc-slurm-legacy.yaml](#hpc-slurm-legacyyaml--) ![community-badge] ![deprecated-badge]
   * [hpc-slurm-legacy-sharedvpc.yaml](#hpc-slurm-legacy-sharedvpcyaml--) ![community-badge] ![deprecated-badge]
 * [Blueprint Schema](#blueprint-schema)
 * [Writing an HPC Blueprint](#writing-an-hpc-blueprint)
@@ -119,13 +117,11 @@ the experimental badge (![experimental-badge]).
 
 ### [hpc-slurm.yaml] ![core-badge]
 
-> **Warning**: The variables `enable_reconfigure`,
-> `enable_cleanup_compute`, and `enable_cleanup_subscriptions`, if set to
-> `true`, require additional dependencies **to be installed on the system deploying the infrastructure**.
+> **Warning**: Requires additional dependencies **to be installed on the system deploying the infrastructure**.
 >
 > ```shell
 > # Install Python3 and run
-> pip3 install -r https://raw.githubusercontent.com/SchedMD/slurm-gcp/5.9.1/scripts/requirements.txt
+> pip3 install -r https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/6.2.1/scripts/requirements.txt
 > ```
 
 Creates a basic auto-scaling Slurm cluster with mostly default settings. The
@@ -265,35 +261,6 @@ to 256
   _not needed for `n2` partition_
 
 [hpc-enterprise-slurm.yaml]: ./hpc-enterprise-slurm.yaml
-
-### [hpc-slurm6.yaml] ![community-badge] ![experimental-badge]
-
-> **Warning**: Requires additional dependencies **to be installed on the system deploying the infrastructure**.
->
-> ```shell
-> # Install Python3 and run
-> pip3 install -r https://raw.githubusercontent.com/GoogleCloudPlatform/slurm-gcp/6.2.1/scripts/requirements.txt
-> ```
-
-Creates a basic auto-scaling Slurm cluster with mostly default settings. The
-blueprint also creates a new VPC network, and a filestore instance mounted to
-`/home`.
-
-There are 2 partitions in this example: `debug`, and `compute`. The `debug`
-partition uses `n2-standard-2` VMs, which should work out of the box without
-needing to request additional quota. The purpose of the `debug` partition is to
-make sure that first time users are not immediately blocked by quota
-limitations.
-
-[hpc-slurm6.yaml]: ../community/examples/hpc-slurm6.yaml
-
-#### Compute Partition
-
-There is a `compute` partition that achieves higher performance. Any
-performance analysis should be done on the `compute` partition. By default it
-uses `c2-standard-60` VMs with placement groups enabled. You may need to request
-additional quota for `C2 CPUs` in the region you are deploying in. You can
-select the compute partition using the `-p compute` argument when running `srun`.
 
 ### [hpc-slurm6-tpu.yaml] ![community-badge] ![experimental-badge]
 
@@ -1024,54 +991,6 @@ is deployed as the native resource manager.
 See [README](../community/examples/flux-framework/README.md)
 
 [flux-cluster.yaml]: ../community/examples/flux-framework/flux-cluster.yaml
-
-### [hpc-slurm-legacy.yaml] ![community-badge] ![deprecated-badge]
-
-Creates a Slurm cluster with tiered file systems for higher performance. It
-connects to the default VPC of the project and creates two partitions and a
-login node.
-
-File systems:
-
-* The homefs mounted at `/home` is a default "BASIC_HDD" tier filestore with
-  1 TiB of capacity
-* The projectsfs is mounted at `/projects` and is a high scale SSD filestore
-  instance with 10TiB of capacity.
-* The scratchfs is mounted at `/scratch` and is a
-  [DDN Exascaler Lustre](../community/modules/file-system/DDN-EXAScaler/README.md)
-  file system designed for high IO performance. The capacity is ~10TiB.
-
-> **Warning**: The DDN Exascaler Lustre file system has a license cost as
-> described in the pricing section of the
-> [DDN EXAScaler Cloud Marketplace Solution](https://console.developers.google.com/marketplace/product/ddnstorage/).
-
-There are two partitions in this example: `low_cost` and `compute`. The
-`low_cost` partition uses `n2-standard-4` VMs. This partition can be used for
-debugging and workloads that do not require high performance.
-
-Similar to the small example, there is a
-[compute partition](#compute-partition) that should be used for any performance
-analysis.
-
-#### Quota Requirements for hpc-slurm-legacy.yaml
-
-For this example the following is needed in the selected region:
-
-* Cloud Filestore API: Basic HDD (Standard) capacity (GB) per region: **1,024 GB**
-* Cloud Filestore API: High Scale SSD capacity (GB) per region: **10,240 GiB** - _min
-  quota request is 61,440 GiB_
-* Compute Engine API: Persistent Disk SSD (GB): **~14,050 GB**
-* Compute Engine API: Persistent Disk Standard (GB): **~396 GB static + 20
-  GB/node** up to 4596 GB
-* Compute Engine API: N2 CPUs: **158**
-* Compute Engine API: C2 CPUs: **8** for controller node and **60/node** active
-  in `compute` partition up to 12,008
-* Compute Engine API: Affinity Groups: **one for each job in parallel** - _only
-  needed for `compute` partition_
-* Compute Engine API: Resource policies: **one for each job in parallel** -
-  _only needed for `compute` partition_
-
-[hpc-slurm-legacy.yaml]: ../community/examples/hpc-slurm-legacy.yaml
 
 ### [hpc-slurm-legacy-sharedvpc.yaml] ![community-badge] ![deprecated-badge]
 

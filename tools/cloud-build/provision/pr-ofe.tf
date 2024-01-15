@@ -12,24 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-terraform {
-  required_version = ">= 1.0"
+resource "google_cloudbuild_trigger" "pr_ofe_venv" {
+  name        = "PR-ofe-venv"
+  description = "Sanity test installing the OFE virtual environment"
 
-  required_providers {
-    google = {
-      source  = "hashicorp/google"
-      version = ">= 4.51.0, < 5.0"
-    }
-    google-beta = {
-      source  = "hashicorp/google-beta"
-      version = ">= 4.65.0, < 5.0"
-    }
-    kubernetes = {
-      source  = "hashicorp/kubernetes"
-      version = "~> 2.23"
+  filename = "tools/cloud-build/pr-ofe.yaml"
+
+  github {
+    owner = "GoogleCloudPlatform"
+    name  = "hpc-toolkit"
+    pull_request {
+      branch          = ".*"
+      comment_control = "COMMENTS_ENABLED_FOR_EXTERNAL_CONTRIBUTORS_ONLY"
     }
   }
-  provider_meta "google" {
-    module_name = "blueprints/terraform/hpc-toolkit:gke-cluster/v1.27.0"
-  }
+  include_build_logs = "INCLUDE_BUILD_LOGS_WITH_STATUS"
 }
