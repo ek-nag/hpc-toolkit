@@ -164,6 +164,10 @@ variable "controller_nodes" {
     termination_action   = optional(string)
   }))
   default = []
+  validation {
+    condition     = length(distinct([for x in var.controller_nodes : x.name_prefix])) == length(var.controller_nodes)
+    error_message = "All controller_nodes must have a unique name_prefix."
+  }
 }
 
 #########

@@ -38,6 +38,7 @@ locals {
   have_template = var.instance_template != null && var.instance_template != ""
 
   controller_node = {
+    name_prefix      = var.name_prefix
     disk_auto_delete = var.disk_auto_delete
     disk_labels      = merge(var.disk_labels, local.labels)
     disk_size_gb     = var.disk_size_gb
