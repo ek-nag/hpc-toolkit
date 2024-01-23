@@ -13,20 +13,6 @@
 # limitations under the License.
 
 locals {
-  additional_disks = [
-    for ad in var.additional_disks : {
-      disk_name    = ad.disk_name
-      device_name  = ad.device_name
-      disk_type    = ad.disk_type
-      disk_size_gb = ad.disk_size_gb
-      disk_labels  = merge(ad.disk_labels, local.labels)
-      auto_delete  = ad.auto_delete
-      boot         = ad.boot
-    }
-  ]
-
-  have_template = var.instance_template != null && var.instance_template != ""
-
   service_account = coalesce(var.service_account, {
     email  = data.google_compute_default_service_account.default.email
     scopes = ["https://www.googleapis.com/auth/cloud-platform"]
@@ -35,78 +21,73 @@ locals {
 
 # INSTANCE TEMPLATE
 module "slurm_controller_template" {
-  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=6.2.1"
-  count  = local.have_template ? 0 : 1
+  source = "github.com/ek-nag/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_instance_template?ref=controller-ha"
+
+  for_each = {
+    for x in var.controller_nodes : x.name_prefix => x
+    if(x.instance_template == null || x.instance_template == "")
+  }
 
   project_id          = var.project_id
-  region              = var.region
-  slurm_instance_role = "controller"
   slurm_cluster_name  = local.slurm_cluster_name
-  labels              = local.labels
+  slurm_instance_role = "controller"
+  slurm_bucket_path   = module.slurm_files.slurm_bucket_path
 
-  disk_auto_delete = var.disk_auto_delete
-  disk_labels      = merge(var.disk_labels, local.labels)
-  disk_size_gb     = var.disk_size_gb
-  disk_type        = var.disk_type
-  additional_disks = local.additional_disks
-
-  bandwidth_tier    = var.bandwidth_tier
-  slurm_bucket_path = module.slurm_files.slurm_bucket_path
-  can_ip_forward    = var.can_ip_forward
-  disable_smt       = var.disable_smt
-
-  enable_confidential_vm   = var.enable_confidential_vm
-  enable_oslogin           = var.enable_oslogin
-  enable_shielded_vm       = var.enable_shielded_vm
-  shielded_instance_config = var.shielded_instance_config
-
-  gpu = one(local.guest_accelerator)
-
-  machine_type     = var.machine_type
-  metadata         = var.metadata
-  min_cpu_platform = var.min_cpu_platform
-
-  # network_ip = TODO: add support for network_ip
-  on_host_maintenance = var.on_host_maintenance
-  preemptible         = var.preemptible
-  service_account     = local.service_account
-
-  source_image_family  = local.source_image_family             # requires source_image_logic.tf
-  source_image_project = local.source_image_project_normalized # requires source_image_logic.tf
-  source_image         = local.source_image                    # requires source_image_logic.tf
-
+  additional_disks         = each.value.additional_disks
+  bandwidth_tier           = each.value.bandwidth_tier
+  can_ip_forward           = each.value.can_ip_forward
+  disable_smt              = each.value.disable_smt
+  disk_auto_delete         = each.value.disk_auto_delete
+  disk_labels              = merge(each.value.disk_labels, local.labels)
+  disk_size_gb             = each.value.disk_size_gb
+  disk_type                = each.value.disk_type
+  enable_confidential_vm   = each.value.enable_confidential_vm
+  enable_oslogin           = each.value.enable_oslogin
+  enable_shielded_vm       = each.value.enable_shielded_vm
+  #gpu                      = one(each.value.guest_accelerator)
+  labels                   = each.value.labels
+  machine_type             = each.value.machine_type
+  metadata                 = each.value.metadata
+  min_cpu_platform         = each.value.min_cpu_platform
+  on_host_maintenance      = each.value.on_host_maintenance
+  preemptible              = each.value.preemptible
+  region                   = each.value.region
+  service_account          = each.value.service_account
+  shielded_instance_config = each.value.shielded_instance_config
+  source_image_family      = each.value.source_image_family
+  source_image_project     = each.value.source_image_project
+  source_image             = each.value.source_image
   # spot = TODO: add support for spot (?)
-  subnetwork = var.subnetwork_self_link
-
-  tags = concat([local.slurm_cluster_name], var.tags)
+  subnetwork = each.value.subnetwork
+  # network_ip = TODO: add support for network_ip
+  tags = concat([local.slurm_cluster_name], each.value.tags)
   # termination_action = TODO: add support for termination_action (?)
 }
 
 # INSTANCE
-locals {
-  # TODO: add support for proper access_config
-  access_config = {
-    nat_ip       = null
-    network_tier = "STANDARD"
-  }
-}
-
 module "slurm_controller_instance" {
-  source = "github.com/GoogleCloudPlatform/slurm-gcp.git//terraform/slurm_cluster/modules/_slurm_instance?ref=6.2.1"
-
-  access_config       = !var.disable_controller_public_ips ? [local.access_config] : []
-  add_hostname_suffix = false
-  hostname            = "${local.slurm_cluster_name}-controller"
-  instance_template   = local.have_template ? var.instance_template : module.slurm_controller_template[0].self_link
+  source = "github.com/ek-nag/slurm-gcp.git//terraform/slurm_cluster/modules/slurm_controller_instance?ref=controller-ha"
+  for_each = { for x in var.controller_nodes : x.name_prefix => x }
 
   project_id          = var.project_id
-  region              = var.region
   slurm_cluster_name  = local.slurm_cluster_name
-  slurm_instance_role = "controller"
-  static_ips          = var.static_ips
-  subnetwork          = var.subnetwork_self_link
-  zone                = var.zone
-  metadata            = var.metadata
+
+  enable_public_ip = each.value.enable_public_ip
+  instance_template = (
+    each.value.instance_template != null && each.value.instance_template != ""
+    ? each.value.instance_template
+    : module.slurm_controller_template[each.key].self_link
+  )
+  network_tier  = each.value.network_tier
+  num_instances = each.value.num_instances
+
+  region              = each.value.region
+  static_ips          = each.value.static_ips
+  subnetwork          = each.value.subnetwork
+  suffix              = each.key
+  zone                = each.value.zone
+  metadata            = each.value.metadata
+  
 
   depends_on = [
     module.slurm_files,
@@ -158,7 +139,8 @@ module "cleanup_compute_nodes" {
   # Depend on controller network, as a best effort to avoid
   # subnetwork resourceInUseByAnotherResource error
   # NOTE: Can not use nodeset subnetworks as "A static list expression is required"
-  depends_on = [var.subnetwork_self_link]
+  #depends_on = var.controller_nodes != [] ? [module.slurm_controller_instance[var.controller_nodes[0].name_prefix].subnetwork] : []
+
 }
 
 

@@ -15,6 +15,7 @@
 
 spec:
   requirements:
-    services: []
-ghpc:
-  has_to_be_used: true
+    services:
+    - compute.googleapis.com
+    - iam.googleapis.com
+    - storage.googleapis.com
