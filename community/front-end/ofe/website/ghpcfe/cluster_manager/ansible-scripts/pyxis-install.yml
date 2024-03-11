@@ -1,0 +1,42 @@
+---
+- name: Install and configure enroot
+  become: true
+  hosts: localhost
+  vars:
+    enroot_version: "v3.4.1"
+  tasks:
+  - name: Download pyxis package
+    ansible.builtin.git:
+      repo: "https://github.com/NVIDIA/pyxis.git"
+      dest: /opt/cluster/pyxis
+
+  - name: Compile pyxis with Slurm
+    ansible.builtin.shell: "{{ item }}"
+    args:
+      chdir: /opt/cluster/pyxis
+    with_items:
+      - make install
+
+  - name: Create 'plugstack' directory
+    ansible.builtin.file:
+      path: /etc/slurm/plugstack.conf.d/
+      state: directory
+      owner: slurm
+      group: slurm
+      mode: '0755'
+
+  - name: Create symlink from /usr/local/share/pyxis/pyxis.conf to /etc/slurm/plugstack.conf.d/pyxis.conf
+    ansible.builtin.file:
+      src: /usr/local/share/pyxis/pyxis.conf
+      dest: /etc/slurm/plugstack.conf.d/pyxis.conf
+      state: link
+      force: yes
+
+  - name: Create /etc/slurm/plugstack.conf with specific content
+    ansible.builtin.copy:
+      dest: /etc/slurm/plugstack.conf
+      content: |
+        include /etc/slurm/plugstack.conf.d/*
+      owner: slurm
+      group: slurm
+      mode: '0755'

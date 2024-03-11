@@ -24,17 +24,21 @@
 import json
 import logging
 import subprocess
+import os
 
 from django.template import engines as template_engines
 from google.api_core.exceptions import PermissionDenied as GCPPermissionDenied
 from website.settings import SITE_NAME
+from django.conf import settings
+from django.core.files import File
 
 from . import c2
 from . import cloud_info
 from . import utils
+from . import image
 
 from .. import grafana
-from ..models import Cluster, ApplicationInstallationLocation, ComputeInstance
+from ..models import Cluster, ApplicationInstallationLocation, ComputeInstance, StartupScript, Image
 
 logger = logging.getLogger(__name__)
 
@@ -93,6 +97,116 @@ class ClusterInfo:
         self.cluster.cloud_state = "nm"
         self.cluster.status = "c"
         self.cluster.save()
+
+        # Check if NGC containers are enabled for the cluster
+        if self.cluster.enable_ngc_containers:
+            logger.info("NGC containers feature enabled.")
+
+            # Create the StartupScript instance
+            install_enroot = StartupScript.objects.create(
+                name="Install enroot",
+                description="Install and configure enroot containers engine.",
+                type="ansible-local",
+                # Initially, you don't need to set 'content' here since it will be set from the file
+                owner=self.cluster.owner
+            )
+
+            # Set authorised users directly without intermediate steps
+            install_enroot.authorised_users.set(
+                self.cluster.authorised_users.all()
+            )
+
+            # Define the path to the enroot-install.yml script
+            enroot_install_path = os.path.join(
+                settings.BASE_DIR, 
+                'ghpcfe', 
+                'cluster_manager', 
+                'ansible-scripts', 
+                'enroot-install.yml'
+            )
+
+            # Open the file and save it to the 'content' field of the StartupScript instance
+            try:
+                with open(enroot_install_path, 'rb') as f:
+                    install_enroot.content.save(os.path.basename(enroot_install_path), File(f))
+            except FileNotFoundError:
+                logger.error(f"File {enroot_install_path} not found.")
+
+            # Create the StartupScript instance
+            install_pyxis = StartupScript.objects.create(
+                name="Install pyxis",
+                description="Install and configure pyxis slurm plugin.",
+                type="ansible-local",
+                # Initially, you don't need to set 'content' here since it will be set from the file
+                owner=self.cluster.owner
+            )
+
+            # Set authorised users directly without intermediate steps
+            install_pyxis.authorised_users.set(
+                self.cluster.authorised_users.all()
+            )
+
+            # Define the path to the enroot-install.yml script
+            pyxis_install_path = os.path.join(
+                settings.BASE_DIR, 
+                'ghpcfe', 
+                'cluster_manager', 
+                'ansible-scripts', 
+                'pyxis-install.yml'
+            )
+
+            # Open the file and save it to the 'content' field of the StartupScript instance
+            try:
+                with open(pyxis_install_path, 'rb') as f:
+                    install_pyxis.content.save(os.path.basename(pyxis_install_path), File(f))
+            except FileNotFoundError:
+                logger.error(f"File {pyxis_install_path} not found.")
+
+            # Create the Image instance
+            ai_slurm_image = Image.objects.create(
+                cloud_credential=self.cluster.cloud_credential,
+                cloud_region=self.cluster.cloud_region,
+                cloud_zone=self.cluster.cloud_zone,
+                name="slurmai-{}".format(self.cluster.id),
+                family="slurmai-family-{}".format(self.cluster.id),
+                source_image_project="schedmd-slurm-public",
+                source_image_family="slurm-gcp-5-10-hpc-rocky-linux-8",
+                enable_os_login="TRUE",
+                block_project_ssh_keys="TRUE",
+                owner=self.cluster.owner,
+                status="n",
+            )
+
+            ai_slurm_image.startup_script.add(install_enroot)
+            ai_slurm_image.startup_script.add(install_pyxis)
+
+            ai_slurm_image.authorised_users.set(
+                self.cluster.authorised_users.all()
+            )
+
+            for (count, part) in enumerate(self.cluster.partitions.all()):
+                part.image = ai_slurm_image
+                part.save()
+
+            self.cluster.login_node_image = ai_slurm_image
+            self.cluster.controller_node_image = ai_slurm_image
+            self.cluster.save()
+
+            # Create the image in the backend.
+            ai_slurm_image_backend = image.ImageBackend(ai_slurm_image)
+            ai_slurm_image_backend.prepare()
+
+            # Define maximum number of attempts and interval between checks (in seconds)
+            max_attempts = 30
+            sleep_interval = 10  # Adjust these values based on expected creation times and responsiveness
+
+            # Wait for the image to become ready
+            for attempt in range(max_attempts):
+                # Refresh the image status from the database
+                ai_slurm_image.refresh_from_db()
+                if ai_slurm_image.status == "r":
+                    break
+                time.sleep(sleep_interval)
 
         self._create_cluster_dir()
         self._set_credentials(credentials)

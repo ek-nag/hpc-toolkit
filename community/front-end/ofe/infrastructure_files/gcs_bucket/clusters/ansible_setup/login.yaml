@@ -27,10 +27,7 @@
     include_role:
       name: spack_setup
     when: enable_spack | default(false) | bool
-  - name: Include enroot install role
-    include_role:
-      name: install_enroot
-    when: enable_ngc_containers | default(false) | bool
+    
   - name: Include ngc_container_setup role
     include_role:
       name: ngc_container_setup

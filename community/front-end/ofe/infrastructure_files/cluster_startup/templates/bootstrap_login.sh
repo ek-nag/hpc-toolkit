@@ -18,7 +18,6 @@ BUCKET={{ server_bucket }}
 CLUSTER_ID={{ cluster.id }}
 SPACK_DIR={{ spack_dir }}
 ENABLE_SPACK={{ cluster.enable_spack }}
-ENABLE_NGC={{ cluster.enable_ngc_containers }}
 
 echo "This is the startup script for the login nodes on cluster ${CLUSTER_ID}"
 
@@ -47,7 +46,6 @@ cluster_id=${CLUSTER_ID}
 cluster_bucket=${BUCKET}
 spack_dir=${SPACK_DIR}
 enable_spack=${ENABLE_SPACK}
-enable_ngc_containers=${ENABLE_NGC}
 EOF
 
 exec ansible-playbook ./login.yaml

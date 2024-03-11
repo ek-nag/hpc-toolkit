@@ -1,0 +1,66 @@
+---
+- name: Install and configure enroot
+  become: true
+  hosts: localhost
+  vars:
+    enroot_version: "v3.4.1"
+  tasks:
+  - name: Install dnf
+    ansible.builtin.yum:
+      name: 
+        - dnf
+      state: present
+
+  - name: Install enroot build dependencies
+    ansible.builtin.dnf:
+      name: 
+        - git
+        - gcc
+        - make
+        - libcap
+        - libtool
+        - automake
+        - libmd-devel
+        - zstd
+      state: present
+
+  - name: Download enroot repo
+    ansible.builtin.git:
+      repo: "https://github.com/NVIDIA/enroot.git"
+      dest: /tmp/enroot
+      version: "{{ enroot_version }}"
+
+  - name: Set kernel configurations
+    ansible.builtin.shell: "{{ item }}"
+    with_items:
+      - grubby --args="namespace.unpriv_enable=1 user_namespace.enable=1" --update-kernel="$(grubby --default-kernel)"
+
+  - name: Set kernel configurations
+    ansible.builtin.lineinfile:
+      path: /etc/sysctl.conf
+      line: "{{ item }}"
+      insertafter: EOF
+    with_items:
+      - user.max_mnt_namespaces=1000
+      - user.max_user_namespaces=1000
+
+  - name: Install enroot runtime dependencies
+    ansible.builtin.dnf:
+      name: 
+        - epel-release
+        - jq
+        - parallel
+        - squashfs-tools
+        - pigz
+        - squashfuse
+        - fuse-overlayfs
+      state: present
+
+  - name: Build and install enroot
+    ansible.builtin.shell: "{{ item }}"
+    args:
+      chdir: /tmp/enroot
+    with_items:
+      - make
+      - make install
+      - make setcap

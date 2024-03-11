@@ -16,4 +16,3 @@
 spack_dir: "{{ ansible_local.ghpcfe.config.spack_dir }}"
 enable_spack: "{{ ansible_local.ghpcfe.config.enable_spack }}"
 enable_ngc_containers: "{{ ansible_local.ghpcfe.config.enable_ngc_containers }}"
-enroot_version: v3.4.1
