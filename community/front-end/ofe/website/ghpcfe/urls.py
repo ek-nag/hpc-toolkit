@@ -125,6 +125,11 @@ urlpatterns += [
         SpackApplicationCreateView.as_view(),
         name="application-create-spack-cluster",
     ),
+    path(
+        "application/create_ngccontainer/<int:cluster>",
+        NGCContainerCreateView.as_view(),
+        name="application-create-ngccontainer-cluster",
+    ),
     path("job/create/<int:app>", JobCreateView.as_view(), name="job-create"),
     path(
         "job/create2/<int:app>/<int:cluster>",
@@ -358,6 +363,9 @@ router.register(r"api/users", UserViewSet, basename="api-user")
 router.register(
     r"api/spack_packages", SpackPackageViewSet, basename="api-spack"
 )
+router.register(
+    r"api/ngc_containers", NGCContainerViewSet, basename="api-ngccontainer"
+)
 router.register(r"api/tasks", RunningTasksViewSet, basename="api-tasks")
 router.register(
     r"api/instance_pricing", InstancePricingViewSet, basename="api-pricing"
@@ -435,6 +443,11 @@ urlpatterns += [
         "backend/spack-install/<int:pk>",
         BackendSpackInstall.as_view(),
         name="backend-spack-install",
+    ),
+    path(
+        "backend/ngccontainer-install/<int:pk>",
+        BackendNGCContainerInstall.as_view(),
+        name="backend-ngccontainer-install",
     ),
     path(
         "backend/custom-app-install/<int:pk>",

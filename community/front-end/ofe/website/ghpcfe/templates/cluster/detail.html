@@ -212,6 +212,7 @@
 {% if object.status == "r" %}
 <a href="{% url 'backend-sync-cluster' object.id %}" class="btn btn-primary">Sync Cluster</a>
 <a href="{% url 'application-create-spack-cluster' object.id %}" class="btn btn-primary">Install Spack Application</a>
+<a href="{% url 'application-create-ngccontainer-cluster' object.id %}" class="btn btn-primary">Download Container From NGC Repository</a>
 <a href="{% url 'application-create-install' object.id %}" class="btn btn-primary">Install Custom Application</a>
 <a href="{% url 'application-create' object.id %}" class="btn btn-primary">Add Manually-configured Application</a>
 <a href="{% url 'cluster-update' object.id %}" class="btn btn-primary">Edit Cluster</a>

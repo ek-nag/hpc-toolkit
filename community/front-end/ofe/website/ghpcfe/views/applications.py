@@ -27,16 +27,19 @@ from rest_framework.response import Response
 
 from ..cluster_manager import c2
 from ..cluster_manager import spack
+from ..cluster_manager import ngccontainer
 from ..cluster_manager import utils
 from ..cluster_manager.clusterinfo import ClusterInfo
 from ..forms import ApplicationEditForm
 from ..forms import ApplicationForm
 from ..forms import CustomInstallationApplicationForm
 from ..forms import SpackApplicationForm
+from ..forms import NGCContainerForm
 from ..models import Application
 from ..models import Cluster
 from ..models import CustomInstallationApplication
 from ..models import SpackApplication
+from ..models import NGCContainer
 from ..serializers import ApplicationSerializer
 from .view_utils import GCSFile
 from .view_utils import StreamingFileView
@@ -108,6 +111,8 @@ class ApplicationDetailView(generic.DetailView):
         )
         if hasattr(self.get_object(), "spackapplication"):
             return ["application/spack_detail.html"]
+        elif hasattr(self.get_object(), "ngccontainerapplication"):
+            return ["application/_detail.html"]
         return super().get_template_names()
 
     def get_context_data(self, **kwargs):
@@ -148,6 +153,8 @@ class ApplicationCreateSelectView(LoginRequiredMixin, generic.ListView):
 
         if request.POST["application-type"] == "spack":
             itemtype = "application-create-spack-cluster"
+        elif request.POST["application-type"] == "ngccontainer":
+            itemtype = "application-create-ngccontainer-cluster"
         elif request.POST["application-type"] == "custom":
             itemtype = "application-create-install"
         elif request.POST["application-type"] == "installed":
@@ -271,6 +278,47 @@ class SpackApplicationCreateView(LoginRequiredMixin, generic.CreateView):
         return HttpResponseRedirect(self.get_success_url())
 
 
+class NGCContainerCreateView(LoginRequiredMixin, generic.CreateView):
+    """Custom CreateView for Application model"""
+
+    # success_url = reverse_lazy('applications'})
+    template_name = "application/ngccontainer_create_form.html"
+    form_class = NGCContainerForm
+
+    def get_initial(self):
+        return {"cluster": Cluster.objects.get(pk=self.kwargs["cluster"])}
+
+    def get_context_data(self, **kwargs):
+        """Perform extra query to populate instance types data"""
+        context = super().get_context_data(**kwargs)
+        context["cluster"] = Cluster.objects.get(pk=self.kwargs["cluster"])
+        context["navtab"] = "application"
+        return context
+
+    def get_success_url(self):
+        return reverse("application-detail", kwargs={"pk": self.object.pk})
+
+    def form_valid(self, form):
+        self.object = form.save(commit=False)
+        self.object.install_loc = self.object.cluster.spack_install
+        #if self.object.version:
+        #    # We need to insert the version immediately following the app name
+        #    # and eventually support compiler...
+        #    self.object.spack_spec = (
+        #        f"@{self.object.version}"
+        #        f'{self.object.spack_spec if self.object.spack_spec else ""}'
+        #    )
+
+        self.object.save()
+        form.save_m2m()
+        messages.success(
+            self.request,
+            f'Application "{self.object.name}" created in database. Click '
+            '"Download Container" button below to download the NGC container.',
+        )
+        return HttpResponseRedirect(self.get_success_url())
+
+
 class ApplicationUpdateView(LoginRequiredMixin, generic.UpdateView):
     """Custom UpdateView for Application model"""
 
@@ -371,6 +419,19 @@ class SpackPackageViewSet(LoginRequiredMixin, viewsets.ViewSet):
             return Response(spack.get_package_info([pk]))
         return Response("Package Not Found", status=404)
 
+
+class NGCContainerViewSet(LoginRequiredMixin, viewsets.ViewSet):
+   """Download a list of NGC Containers available"""
+
+   def list(self, request):
+       return Response(ngccontainer.get_model_list())
+
+   def retrieve(self, request, pk=None):
+       pkgs = ngccontainer.get_model_list()
+       if pk in pkgs:
+           return Response(ngccontainer.get_model_info([pk]))
+       return Response("Package Not Found", status=404)
+    
 
 # Other supporting views
 
@@ -479,6 +540,60 @@ class BackendSpackInstall(LoginRequiredMixin, generic.View):
                 "extra_sbatch": [f"--gpus={app.install_partition.GPU_per_node}"]
                 if app.install_partition.GPU_per_node
                 else [],
+            },
+        )
+        return HttpResponseRedirect(
+            reverse("application-detail", kwargs={"pk": pk})
+        )
+
+
+class BackendNGCContainerInstall(LoginRequiredMixin, generic.View):
+    """Backend logic to download a container from the NGC registry"""
+
+    def get(self, request, pk):
+        app = get_object_or_404(NGCContainer, pk=pk)
+        app.status = "p"
+        app.save()
+        cluster_id = app.cluster.id
+
+        def response(message):
+            if message.get("cluster_id") != cluster_id:
+                logger.error(
+                    "Cluster ID mismatch versus callback: expected %s, "
+                    "received %s",
+                    pk,
+                    message.get("cluster_id"),
+                )
+            if message.get("app_id") != pk:
+                logger.error(
+                    "Application ID mismatch versus callback: expected %s, "
+                    "received %s",
+                    pk,
+                    message.get("app_id"),
+                )
+
+            if "log_message" in message:
+                logger.info("Install log message: %s", message["log_message"])
+
+            app = Application.objects.get(pk=pk)
+            app.status = message["status"]
+            if message["status"] == "r":
+                # App was installed.  Should have more attributes to set
+                app.load_command = message.get("load_command", "")
+                #app.installed_architecture = message.get("spack_arch", "")
+                #app.compiler = message.get("compiler", "")
+                #app.mpi = message.get("mpi", "")
+            app.save()
+
+        c2.send_command(
+            cluster_id,
+            "NGCCONTAINER_INSTALL",
+            on_response=response,
+            data={
+                "app_id": app.id,
+                "name": app.container_name,
+                #"spec": app.spack_spec,
+                "partition": app.install_partition.name,
             },
         )
         return HttpResponseRedirect(

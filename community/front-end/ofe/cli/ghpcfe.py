@@ -236,6 +236,13 @@ def application_spack_install():
     """Install a Spack application."""
     pass
 
+@application.command(name="ngccontainer-install",
+                     short_help="Download a container from the NGC registry.")
+@notimplementedyet
+def application_ngccontainer_install():
+    """Download container from NGC registry."""
+    pass
+
 
 # job management
 

@@ -140,6 +140,11 @@ class SpackApplicationAdmin(admin.ModelAdmin):
                     "mpi", "status")
 
 
+class NGCContainerAdmin(admin.ModelAdmin):
+    """ Custom ModelAdmin for Application model """
+    list_display = ("id", "name", "version", "description")
+    
+
 class JobAdmin(admin.ModelAdmin):
     """ Custom ModelAdmin for Job model """
     list_display = ("id", "get_name", "partition", "number_of_nodes",
@@ -154,6 +159,7 @@ class JobAdmin(admin.ModelAdmin):
 # Register your models here.
 admin.site.register(Application, ApplicationAdmin)
 admin.site.register(SpackApplication, SpackApplicationAdmin)
+admin.site.register(NGCContainer, NGCContainerAdmin)
 admin.site.register(CustomInstallationApplication)
 admin.site.register(ApplicationInstallationLocation)
 admin.site.register(VirtualNetwork, VirtualNetworkAdmin)

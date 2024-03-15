@@ -1167,6 +1167,17 @@ class SpackApplication(Application):
     )
 
 
+class NGCContainer(Application):
+    """Managed container installed from the NGC registry"""
+
+    container_name = models.CharField(
+        max_length=30,
+        help_text="Name of the application in the NGC registry",
+        blank=True,
+        null=True,
+    )
+
+
 class Benchmark(models.Model):
     """Model representing a benchmark"""
 

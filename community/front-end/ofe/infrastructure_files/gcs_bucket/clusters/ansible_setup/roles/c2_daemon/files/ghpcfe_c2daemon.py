@@ -504,6 +504,84 @@ exec {install_script}
 
 
 @cb_in_thread
+def cb_ngccontainer_download(message):
+    """Custom application installation handler"""
+
+    appid = message["app_id"]
+    app_name = message["name"]
+    response = {"ackid": message["ackid"], "app_id": appid, "status": "e"}
+    logger.info(
+        "Beginning install of custom application %s:%s", appid, app_name
+    )
+
+    gcs_tgt_out = f"installs/{appid}/stdout"
+    gcs_tgt_err = f"installs/{appid}/stderr"
+
+    (jobid, outfile, errfile) = _install_submit_job(**message)
+    if not jobid:
+        # There was an error - stdout, stderr in outfile, errfile
+        logger.error("Failed to run batch submission")
+        _upload_log_blobs(
+            {
+                gcs_tgt_out: outfile,
+                gcs_tgt_err: errfile,
+            }
+        )
+        response["status"] = "e"
+        send_message("ACK", response)
+        return
+    logger.info("Install job queued for %s:%s", appid, app_name)
+    response["status"] = "q"
+    send_message("UPDATE", response)
+
+    state = "PENDING"
+    while state in ["PENDING", "CONFIGURING"]:
+        time.sleep(30)
+        state = _slurm_get_job_state(jobid)
+    if state == "RUNNING":
+        logger.info("Install job running for %s:%s", appid, app_name)
+        response["status"] = "i"
+        send_message("UPDATE", response)
+    while state in ["RUNNING"]:
+        time.sleep(30)
+        state = _slurm_get_job_state(jobid)
+    logger.info(
+        "Install job for %s:%s completed with result %s",
+        appid,
+        app_name,
+        state,
+    )
+    status = "r" if state in ["COMPLETED", "COMPLETING"] else "e"
+    response["status"] = status
+    if status == "r":
+        # Application installed.  Install Module file if appropriate
+        if message.get("module_name", "") and message.get("module_script", ""):
+            module_path = (
+                Path("/opt/cluster/modulefiles") / message["module_name"]
+            )
+            module_path.parent.mkdir(parents=True, exist_ok=True)
+            with module_path.open("w") as fileh:
+                fileh.write(message["module_script"])
+
+    logger.info(
+        "Uploading install log files for %s:%s (state: %s)",
+        appid,
+        app_name,
+        response["status"],
+    )
+    try:
+        _upload_log_files(
+            {
+                gcs_tgt_out: f"/opt/cluster/installs/{appid}/{app_name}.out",
+                gcs_tgt_err: f"/opt/cluster/installs/{appid}/{app_name}.err",
+            }
+        )
+    except Exception as err:
+        logger.error("Failed to upload log files", exc_info=err)
+    send_message("ACK", response)
+
+
+@cb_in_thread
 def cb_install_app(message):
     """Custom application installation handler"""
 
@@ -1130,6 +1208,7 @@ callback_map = {
     "UPDATE": cb_update,
     "SPACK_INSTALL": cb_spack_install,
     "INSTALL_APPLICATION": cb_install_app,
+    "NGCCONTAINER_DOWNLOAD": cb_ngccontainer_download,
     "RUN_JOB": cb_run_job,
     "REGISTER_USER_GCS": cb_register_user_gcs,
 }

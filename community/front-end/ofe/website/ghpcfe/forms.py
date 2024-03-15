@@ -600,6 +600,36 @@ class SpackApplicationForm(forms.ModelForm):
         self.fields["install_partition"].queryset = cluster.partitions
 
 
+class NGCContainerForm(forms.ModelForm):
+    """Custom form for application model"""
+
+    class Meta:
+        model = NGCContainer
+
+        fields = (
+            "cluster",
+            "container_name",
+            "name",
+            "version",
+            "description",
+        )
+
+        widgets = {
+            "cluster": forms.Select(
+                attrs={"class": "form-control", "disabled": True}
+            ),
+            "container_name": forms.TextInput(attrs={"class": "form-control"}),
+            "name": forms.TextInput(attrs={"class": "form-control"}),
+            "version": forms.Select(attrs={"class": "form-control"}),
+            "description": forms.Textarea(attrs={"class": "form-control"}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        cluster = kwargs["initial"]["cluster"]
+        self.fields["install_partition"].queryset = cluster.partitions
+
+
 class JobForm(forms.ModelForm):
     """Custom form for job model"""
 
