@@ -172,7 +172,7 @@ deployment_groups:
         try:
             logger.info(f"Invoking ghpc create for the image {self.image.id}")
             env = os.environ.copy()
-            env['GOOGLE_APPLICATION_CREDENTIALS'] = self._get_credentials_file()
+            env['GOOGLE_APPLICATION_CREDENTIALS'] = target_dir / "cloud_credentials"
             log_out_fn = target_dir / "ghpc_create_log.stdout"
             log_err_fn = target_dir / "ghpc_create_log.stderr"
             with log_out_fn.open("wb") as log_out:
