@@ -178,7 +178,7 @@ deployment_groups:
             with log_out_fn.open("wb") as log_out:
                 with log_err_fn.open("wb") as log_err:
                     subprocess.run(
-                        [self.ghpc_path, "create", "image.yaml"],
+                        [self.ghpc_path, "create", "image.yaml","--validation-level", "IGNORE"],
                         cwd=target_dir,
                         stdout=log_out,
                         stderr=log_err,
