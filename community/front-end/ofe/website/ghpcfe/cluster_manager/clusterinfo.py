@@ -753,7 +753,8 @@ deployment_groups:
                     )
 
                 # Set up Spack Install location
-                self._configure_spack_install_loc()
+                if self.cluster.enable_spack == True:
+                    self._configure_spack_install_loc()
 
                 self.cluster.save()
 

@@ -18,9 +18,31 @@
   connection: local
   vars_files:
   - ./vars.yaml
-  roles:
-  - common
-  - spack_install
-  - spack_setup
-  # This one should be last - has a role to check in with FE to signal ready
-  - c2_daemon
+  tasks:
+  - name: Common setup
+    include_role:
+      name: common
+
+  - name: Install Spack
+    include_role:
+      name: spack_install
+    when: enable_spack | default(false) | bool
+
+  - name: Setup Spack
+    include_role:
+      name: spack_setup
+    when: enable_spack | default(false) | bool
+
+  - name: Configure C2 daemon
+    include_role:
+      name: c2_daemon
+      
+  - name: Include ngc_container_install role
+    include_role:
+      name: ngc_container_install
+    when: enable_ngc_containers | default(false) | bool
+
+  - name: Include ngc_container_setup role
+    include_role:
+      name: ngc_container_setup
+    when: enable_ngc_containers | default(false) | bool

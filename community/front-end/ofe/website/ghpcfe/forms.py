@@ -174,6 +174,8 @@ class ClusterForm(forms.ModelForm):
             "controller_node_image",
             "use_cloudsql",
             "use_bigquery",
+            "enable_spack",
+            "enable_ngc_containers",
         )
 
         widgets = {

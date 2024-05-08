@@ -17,42 +17,77 @@
 {% extends "base_generic.html" %}
 
 {% block content %}
-  <h2>Create an application</h2>
+<h2>Create an application</h2>
+
+<form action="" method="post">
+  {% csrf_token %}
+  <div class="form-group">
+    <label for="id_cluster">Cluster:</label>
+    <select name="cluster" class="form-control" required id="id_cluster" onchange="updateApplicationTypes()">
+      <option value="" selected>--------</option>
+      {% for cluster in cluster_list %}
+      <option value="{{ cluster.id }}" data-enable-spack="{{ cluster.enable_spack }}" data-enable-ngc-containers="{{ cluster.enable_ngc_containers }}">{{ cluster.name }}</option>
+      {% endfor %}
+    </select>
+    <small class="form-text text-muted">Select a cluster to install this application</small>
+  </div>
 
   <hr>
-  <p>Three types of applications are supported:</p>
-  <ul>
-    <li><b>Spack applications</b>: use the Spack package management system to install commonly used and mostly open-source applications.</li>
-    <li><b>Custom applications</b>: for applications not yet supported by Spack, e.g. in-house applications or those Spack fails to build, use custom scripts to install them.</li>
-    <li><b>Pre-installed applications</b>: if applications have to be manually installed on clusters (e.g. commercial applications with complex set-up), register them with the system.</li>
-  </ul>
+  <div id="application-types">
+    <p>Types of applications supported on selected cluster:</p>
+    <ul>
+      <li id="spack-application" style="display:none;"><b>Spack applications</b>: use the Spack package management system to install commonly used and mostly open-source applications.</li>
+      <li id="ngc-container" style="display:none;"><b>NGC (AI)</b>: use containers from the NVIDIA NGC AI Development Catalog.</li>
+      <li><b>Custom applications</b>: for applications not yet supported by Spack, e.g. in-house applications or those Spack fails to build, use custom scripts to install them.</li>
+      <li><b>Pre-installed applications</b>: if applications have to be manually installed on clusters (e.g. commercial applications with complex set-up), register them with the system.</li>
+    </ul>
+  </div>
   <hr>
 
-  <form action="" method="post">
-    {% csrf_token %}
-    <div class="form-group">
-      <label for="id_cluster">Cluster:</label>
-      <select name="cluster" class="form-control" required id="id_cluster">
-        <option value="" selected>--------</option>
-    {% for cluster in cluster_list %}
-        <option value="{{ cluster.id }}" >{{ cluster.name }}</option>
-    {% endfor %}
-      </select>
-      <small class="form-text text-muted">Select a cluster to install this application</small>
-    </div>
-    <div class="form-group">
-      <label for="id_cluster">Application Type:</label>
-      <br/>
-      <input type="radio" id="type1" name="application-type" value="spack" required>
-      <label for="type1">Spack application</label>
-      <input type="radio" id="type2" name="application-type" value="custom">
-      <label for="type2">Custom application</label>
-      <input type="radio" id="type3" name="application-type" value="installed">
-      <label for="type3">Pre-installed application</label>
-      <small class="form-text text-muted">Which type of application to set up?</small>
-    </div>
-    <br/>  
-    <input type="submit" value="Next" class="btn btn-primary"/>
-  </form>
+  <div class="form-group">
+    <label for="id_application_type">Application Type:</label>
+    <br/>
+    <input type="radio" id="type1" name="application-type" value="spack" style="display:none;">
+    <label for="type1" style="display:none;">Spack application</label>
+    <input type="radio" id="type2" name="application-type" value="ngc" style="display:none;">
+    <label for="type2" style="display:none;">NGC (AI)</label>
+    <input type="radio" id="type3" name="application-type" value="custom">
+    <label for="type3">Custom application</label>
+    <input type="radio" id="type4" name="application-type" value="installed">
+    <label for="type4">Pre-installed application</label>
+    <small class="form-text text-muted">Which type of application to set up?</small>
+  </div>
+  <br/>
+  <input type="submit" value="Next" class="btn btn-primary"/>
+</form>
+
+<script>
+function updateApplicationTypes() {
+  const clusterSelect = document.getElementById('id_cluster');
+  const selectedOption = clusterSelect.options[clusterSelect.selectedIndex];
+  const enableSpack = selectedOption.getAttribute('data-enable-spack') === 'True';
+  const enableNGC = selectedOption.getAttribute('data-enable-ngc-containers') === 'True';
+
+  document.getElementById('spack-application').style.display = enableSpack ? '' : 'none';
+  const spackInput = document.getElementById('type1');
+  const spackLabel = document.querySelector('label[for="type1"]');
+  spackInput.style.display = enableSpack ? '' : 'none';
+  spackLabel.style.display = enableSpack ? '' : 'none';
+
+  document.getElementById('ngc-container').style.display = enableNGC ? '' : 'none';
+  const ngcInput = document.getElementById('type2');
+  const ngcLabel = document.querySelector('label[for="type2"]');
+  ngcInput.style.display = enableNGC ? '' : 'none';
+  ngcLabel.style.display = enableNGC ? '' : 'none';
+  
+  // If Spack or NGC containers are not enabled, ensure they're not selected
+  if ((!enableSpack && spackInput.checked) || (!enableNGC && ngcInput.checked )) {
+    spackInput.checked = false;
+    ngcInput.checked = false;
+    // Optionally, select another application type by default
+    document.getElementById('type3').checked = true;
+  }
+}
+</script>
 
 {% endblock %}

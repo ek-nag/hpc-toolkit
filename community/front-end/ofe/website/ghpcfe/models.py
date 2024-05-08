@@ -802,6 +802,14 @@ class Cluster(CloudResource):
             "Would you like to send Slurm accounting data to BigQuery?"
         ),
     )
+    enable_spack = models.BooleanField(
+        default=False,
+        help_text="Enable Spack applications for this cluster?",
+    )
+    enable_ngc_containers = models.BooleanField(
+        default=False,
+        help_text="Enable NGC containers support for this cluster?",
+    )
 
     def get_access_key(self):
         return Token.objects.get(user=self.owner)

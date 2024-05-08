@@ -18,7 +18,12 @@
   connection: local
   vars_files:
   - ./vars.yaml
-  roles:
-  - common
-  - dev_env
-  - spack_setup
+  tasks:
+  - include_role:
+      name: common
+  - include_role:
+      name: dev_env
+  - name: Include spack_setup role conditionally
+    include_role:
+      name: spack_setup
+    when: enable_spack | default(false) | bool
