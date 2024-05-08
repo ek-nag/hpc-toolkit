@@ -114,7 +114,7 @@ class ImageBackend:
                 script_path = os.path.join(settings.MEDIA_ROOT, script.content.name)
                 runners+=f"""        
       - type: {script.type}
-        destination: {script.name}
+        destination: {script_path}
         source: {script_path}"""
 
             with blueprint_file.open("w") as f:
