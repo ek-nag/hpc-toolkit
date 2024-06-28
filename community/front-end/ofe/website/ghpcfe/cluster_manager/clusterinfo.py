@@ -232,6 +232,19 @@ class ClusterInfo:
                 'disk_range': disk_range,
                 'exclusive': exclusive
             }
+            
+            if self.cluster.controller_node_image is not None:
+                context["controller_image_yaml"] = f"""instance_image:
+            family: image-{self.cluster.controller_node_image.family}
+            project: {self.cluster.project_id}
+            """
+            
+            if self.cluster.login_node_image is not None:
+                context["login_image_yaml"] = f"""instance_image:
+            family: image-{self.cluster.login_node_image.family}
+            project: {self.cluster.project_id}
+            """
+            
             rendered_yaml = template.render(context)
             indented_yaml = self.indent_text(rendered_yaml, 1)   # Same here
             partitions_yaml.append(indented_yaml)
