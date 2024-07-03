@@ -27,9 +27,9 @@
   become: true
   when: ansible_distribution == 'Rocky'
 
-- name: Install setuptools for Python 3.11
+- name: Install setuptools for Python 3.12
   ansible.builtin.command:
-    cmd: /usr/bin/python3.11 -m ensurepip --upgrade
+    cmd: /usr/bin/python3.12 -m ensurepip --upgrade
   become: true
   when: ansible_distribution == 'Rocky'
 
